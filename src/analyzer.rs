@@ -27,6 +27,8 @@ pub fn analyze_and_print(scored: &[ScoredCard], legend_card: &Card, champion_car
 
     let champ_mechs: HashSet<String> = champion_card.extract_deep_mechanics().into_iter().collect();
     let legend_mechs: HashSet<String> = legend_card.extract_deep_mechanics().into_iter().collect();
+    
+    let deck_cares_about_mighty = champ_mechs.contains("MightyConsumer") || legend_mechs.contains("MightyConsumer");
 
     let mut current_domain_group = String::new();
 
@@ -81,8 +83,8 @@ pub fn analyze_and_print(scored: &[ScoredCard], legend_card: &Card, champion_car
             if result.card.name == other.card.name { continue; }
             let (other_ints, other_trigs, other_mechs) = card_data.get(&other.card.name).unwrap();
             
-            // Cross-card Deep Combos
-            if my_mechs.contains("BuffSource") && other_mechs.contains("MightyConsumer") {
+            // Cross-card Deep Combos (only if deck naturally cares about mighty)
+            if deck_cares_about_mighty && my_mechs.contains("BuffSource") && other_mechs.contains("MightyConsumer") {
                 deep_combos.push(format!("[{}] buffs [{}] to hit Mighty threshold!", result.card.name, other.card.name));
             }
             
