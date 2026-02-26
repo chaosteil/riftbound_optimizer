@@ -1,5 +1,5 @@
 use std::collections::{HashSet, HashMap};
-use crate::models::Card;
+use crate::models::{Card, DeepMechanic};
 use crate::engine::ScoredCard;
 
 pub fn analyze_and_print(scored: &[ScoredCard], legend_card: &Card, champion_card: &Card) {
@@ -21,14 +21,14 @@ pub fn analyze_and_print(scored: &[ScoredCard], legend_card: &Card, champion_car
     for s in scored {
         let ints: HashSet<String> = s.card.extract_interactions().into_iter().collect();
         let trigs: HashSet<String> = s.card.extract_triggers().into_iter().collect();
-        let mechs: HashSet<String> = s.card.extract_deep_mechanics().into_iter().collect();
+        let mechs: HashSet<DeepMechanic> = s.card.extract_deep_mechanics().into_iter().collect();
         card_data.insert(s.card.name.clone(), (ints, trigs, mechs));
     }
 
-    let champ_mechs: HashSet<String> = champion_card.extract_deep_mechanics().into_iter().collect();
-    let legend_mechs: HashSet<String> = legend_card.extract_deep_mechanics().into_iter().collect();
+    let champ_mechs: HashSet<DeepMechanic> = champion_card.extract_deep_mechanics().into_iter().collect();
+    let legend_mechs: HashSet<DeepMechanic> = legend_card.extract_deep_mechanics().into_iter().collect();
     
-    let deck_cares_about_mighty = champ_mechs.contains("MightyConsumer") || legend_mechs.contains("MightyConsumer");
+    let deck_cares_about_mighty = champ_mechs.contains(&DeepMechanic::MightyConsumer) || legend_mechs.contains(&DeepMechanic::MightyConsumer);
 
     let mut current_domain_group = String::new();
 
@@ -62,19 +62,19 @@ pub fn analyze_and_print(scored: &[ScoredCard], legend_card: &Card, champion_car
         let mut deep_combos = Vec::new();
 
         // Check deep combos directly with Champion or Legend
-        if my_mechs.contains("BuffSource") {
-            if champ_mechs.contains("MightyConsumer") {
+        if my_mechs.contains(&DeepMechanic::BuffSource) {
+            if champ_mechs.contains(&DeepMechanic::MightyConsumer) {
                 deep_combos.push(format!("[{}] buffs [{}] (Champion) to hit Mighty threshold!", result.card.name, champion_card.name));
             }
-            if legend_mechs.contains("MightyConsumer") {
+            if legend_mechs.contains(&DeepMechanic::MightyConsumer) {
                 deep_combos.push(format!("[{}] buffs [{}] (Legend) to hit Mighty threshold!", result.card.name, legend_card.name));
             }
         }
-        if my_mechs.contains("MightyConsumer") {
-            if champ_mechs.contains("BuffSource") {
+        if my_mechs.contains(&DeepMechanic::MightyConsumer) {
+            if champ_mechs.contains(&DeepMechanic::BuffSource) {
                 deep_combos.push(format!("[{}] (Champion) buffs [{}] to hit Mighty threshold!", champion_card.name, result.card.name));
             }
-            if legend_mechs.contains("BuffSource") {
+            if legend_mechs.contains(&DeepMechanic::BuffSource) {
                 deep_combos.push(format!("[{}] (Legend) buffs [{}] to hit Mighty threshold!", legend_card.name, result.card.name));
             }
         }
@@ -84,7 +84,7 @@ pub fn analyze_and_print(scored: &[ScoredCard], legend_card: &Card, champion_car
             let (other_ints, other_trigs, other_mechs) = card_data.get(&other.card.name).unwrap();
             
             // Cross-card Deep Combos (only if deck naturally cares about mighty)
-            if deck_cares_about_mighty && my_mechs.contains("BuffSource") && other_mechs.contains("MightyConsumer") {
+            if deck_cares_about_mighty && my_mechs.contains(&DeepMechanic::BuffSource) && other_mechs.contains(&DeepMechanic::MightyConsumer) {
                 deep_combos.push(format!("[{}] buffs [{}] to hit Mighty threshold!", result.card.name, other.card.name));
             }
             

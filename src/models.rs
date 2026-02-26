@@ -1,5 +1,36 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum DeepMechanic {
+    BuffSource,
+    MightyConsumer,
+    TokenSpawner,
+    SpellDamage,
+    AggroTool,
+    HighCostUnit,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum SbreadTag {
+    Bomb,
+    Removal,
+    Evasion,
+    Aggro,
+    Dump,
+}
+
+impl std::fmt::Display for SbreadTag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SbreadTag::Bomb => write!(f, "Bomb"),
+            SbreadTag::Removal => write!(f, "Removal"),
+            SbreadTag::Evasion => write!(f, "Evasion"),
+            SbreadTag::Aggro => write!(f, "Aggro"),
+            SbreadTag::Dump => write!(f, "Dump"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Card {
     pub name: String,
@@ -102,105 +133,104 @@ impl Card {
         false
     }
 
-    pub fn extract_sbread(&self) -> Vec<String> {
-        let mut tags = Vec::new();
-        let t = self.clean_text().to_lowercase();
-        let energy = self.energy.unwrap_or(0);
-
-        if self.is_type("Unit") && energy >= 6 {
-            tags.push("Bomb".to_string());
+        pub fn extract_sbread(&self) -> Vec<SbreadTag> {
+            let mut tags = Vec::new();
+            let t = self.clean_text().to_lowercase();
+            let energy = self.energy.unwrap_or(0);
+    
+            if self.is_type("Unit") && energy >= 6 {
+                tags.push(SbreadTag::Bomb);
+            }
+    
+            if t.contains("deal ") || t.contains("destroy") || t.contains("recycle") {
+                tags.push(SbreadTag::Removal);
+            }
+    
+            if t.contains("[ganking]") || t.contains("[deflect]") || t.contains("[hidden]") || t.contains("[shield]") {
+                tags.push(SbreadTag::Evasion);
+            }
+    
+            if self.is_type("Unit") && energy <= 2 && (self.power.unwrap_or(0) > 0 || t.contains("[assault") || t.contains("ready")) {
+                tags.push(SbreadTag::Aggro);
+            }
+    
+            if t.contains("draw") {
+                tags.push(SbreadTag::Dump);
+            }
+    
+            tags
         }
-
-        if t.contains("deal ") || t.contains("destroy") || t.contains("recycle") {
-            tags.push("Removal".to_string());
-        }
-
-        if t.contains("[ganking]") || t.contains("[deflect]") || t.contains("[hidden]") || t.contains("[shield]") {
-            tags.push("Evasion".to_string());
-        }
-
-        if self.is_type("Unit") && energy <= 2 && (self.power.unwrap_or(0) > 0 || t.contains("[assault") || t.contains("ready")) {
-            tags.push("Aggro".to_string());
-        }
-
-        if t.contains("draw") {
-            tags.push("Dump".to_string());
-        }
-
-        tags
-    }
-
-    pub fn extract_interactions(&self) -> Vec<String> {
-        let mut interactions = Vec::new();
-        if let Some(text) = &self.text {
-            let t = text.to_lowercase();
-            let verbs = [
-                "draw", "discard", "damage", "heal", "exhaust", "ready", "buff", "destroy",
-                "strike", "summon", "token", "prevent", "pay", "return", "reveal", "choose"
-            ];
-            for v in verbs {
-                if t.contains(v) {
-                    interactions.push(v.to_string());
+    
+        pub fn extract_interactions(&self) -> Vec<String> {
+            let mut interactions = Vec::new();
+            if let Some(text) = &self.text {
+                let t = text.to_lowercase();
+                let verbs = [
+                    "draw", "discard", "damage", "heal", "exhaust", "ready", "buff", "destroy",
+                    "strike", "summon", "token", "prevent", "pay", "return", "reveal", "choose"
+                ];
+                for v in verbs {
+                    if t.contains(v) {
+                        interactions.push(v.to_string());
+                    }
                 }
             }
+            interactions.sort();
+            interactions.dedup();
+            interactions
         }
-        interactions.sort();
-        interactions.dedup();
-        interactions
-    }
-
-    pub fn extract_triggers(&self) -> Vec<String> {
-        let mut triggers = Vec::new();
-        if let Some(text) = &self.text {
-            let t = text.to_lowercase();
-            let patterns = [
-                "when you play", "when this enters", "when you discard", "reaction", "action", "if you", "after", "before", "when you draw"
-            ];
-            for p in patterns {
-                if t.contains(p) {
-                    triggers.push(p.to_string());
+    
+        pub fn extract_triggers(&self) -> Vec<String> {
+            let mut triggers = Vec::new();
+            if let Some(text) = &self.text {
+                let t = text.to_lowercase();
+                let patterns = [
+                    "when you play", "when this enters", "when you discard", "reaction", "action", "if you", "after", "before", "when you draw"
+                ];
+                for p in patterns {
+                    if t.contains(p) {
+                        triggers.push(p.to_string());
+                    }
                 }
             }
+            triggers.sort();
+            triggers.dedup();
+            triggers
         }
-        triggers.sort();
-        triggers.dedup();
-        triggers
-    }
-
-    pub fn extract_deep_mechanics(&self) -> Vec<String> {
-        let mut mechanics = Vec::new();
-        if let Some(text) = &self.text {
-            let t = text.to_lowercase();
+    
+        pub fn extract_deep_mechanics(&self) -> Vec<DeepMechanic> {
+            let mut mechanics = Vec::new();
+            if let Some(text) = &self.text {
+                let t = text.to_lowercase();
+                
+                // Check if it's a Buff Source
+                if t.contains("buff") || t.contains("+1 :rb_might:") || t.contains("+2 :rb_might:") || t.contains("+3 :rb_might:") || t.contains("+4 :rb_might:") || t.contains("[assault") {
+                    mechanics.push(DeepMechanic::BuffSource);
+                }
+    
+                // Check if it's a Mighty / Buff Target
+                if t.contains("[mighty]") || t.contains("5+ :rb_might:") || t.contains("might:") {
+                    mechanics.push(DeepMechanic::MightyConsumer);
+                }
+    
+                // Meta Mechanics
+                if t.contains("token") || t.contains("summon") {
+                    mechanics.push(DeepMechanic::TokenSpawner);
+                }
+                if self.is_type("Spell") && (t.contains("deal ") || t.contains("damage")) {
+                    mechanics.push(DeepMechanic::SpellDamage);
+                }
+                if t.contains("ready") || t.contains("assault") {
+                    mechanics.push(DeepMechanic::AggroTool);
+                }
+            }
             
-            // Check if it's a Buff Source
-            if t.contains("buff") || t.contains("+1 :rb_might:") || t.contains("+2 :rb_might:") || t.contains("+3 :rb_might:") || t.contains("+4 :rb_might:") || t.contains("[assault") {
-                mechanics.push("BuffSource".to_string());
-            }
-
-            // Check if it's a Mighty / Buff Target
-            if t.contains("[mighty]") || t.contains("5+ :rb_might:") || t.contains("might:") {
-                mechanics.push("MightyConsumer".to_string());
-            }
-
-            // Meta Mechanics
-            if t.contains("token") || t.contains("summon") {
-                mechanics.push("TokenSpawner".to_string());
-            }
-            if self.is_type("Spell") && (t.contains("deal ") || t.contains("damage")) {
-                mechanics.push("SpellDamage".to_string());
-            }
-            if t.contains("ready") || t.contains("assault") {
-                mechanics.push("AggroTool".to_string());
-            }
-        }
-        
-        // High cost unit
-        if self.is_type("Unit")
-            && let Some(cost) = self.energy
+            // High cost unit
+            if self.is_type("Unit")
+                && let Some(cost) = self.energy
                 && cost >= 7 {
-                    mechanics.push("HighCostUnit".to_string());
+                    mechanics.push(DeepMechanic::HighCostUnit);
                 }
-
-        mechanics
-    }
-}
+    
+            mechanics
+        }}

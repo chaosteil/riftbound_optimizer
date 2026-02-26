@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use crate::models::Card;
+use crate::models::{Card, DeepMechanic, SbreadTag};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Archetype {
@@ -46,7 +46,7 @@ pub struct ScoredCard<'a> {
     pub matched_triggers: Vec<String>,
     pub meta_bonus: bool,
     pub cabs: bool,
-    pub sbread: Vec<String>,
+    pub sbread: Vec<SbreadTag>,
 }
 
 impl SynergyScorer {
@@ -77,7 +77,7 @@ impl SynergyScorer {
         let candidate_keywords: HashSet<String> = candidate.extract_keywords().into_iter().collect();
         let candidate_interactions: HashSet<String> = candidate.extract_interactions().into_iter().collect();
         let candidate_triggers: HashSet<String> = candidate.extract_triggers().into_iter().collect();
-        let candidate_mechs: HashSet<String> = candidate.extract_deep_mechanics().into_iter().collect();
+        let candidate_mechs: HashSet<DeepMechanic> = candidate.extract_deep_mechanics().into_iter().collect();
         
         let mut matched_keywords: HashSet<String> = HashSet::new();
         for k in candidate_keywords.intersection(&self.legend_keywords) { matched_keywords.insert(k.clone()); }
@@ -109,25 +109,25 @@ impl SynergyScorer {
         let mut meta_bonus = false;
         match self.archetype {
             Archetype::AggroTempo => {
-                if candidate_mechs.contains("AggroTool") {
+                if candidate_mechs.contains(&DeepMechanic::AggroTool) {
                     score += 5;
                     meta_bonus = true;
                 }
             }
             Archetype::SpellslingerControl => {
-                if candidate_mechs.contains("SpellDamage") {
+                if candidate_mechs.contains(&DeepMechanic::SpellDamage) {
                     score += 5;
                     meta_bonus = true;
                 }
             }
             Archetype::ComboCheat => {
-                if candidate_mechs.contains("HighCostUnit") {
+                if candidate_mechs.contains(&DeepMechanic::HighCostUnit) {
                     score += 5;
                     meta_bonus = true;
                 }
             }
             Archetype::TokenFlood => {
-                if candidate_mechs.contains("TokenSpawner") {
+                if candidate_mechs.contains(&DeepMechanic::TokenSpawner) {
                     score += 5;
                     meta_bonus = true;
                 }

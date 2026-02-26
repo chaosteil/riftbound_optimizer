@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::models::Card;
+use crate::models::{Card, SbreadTag};
 use crate::engine::ScoredCard;
 
 pub struct Decklist<'a> {
@@ -50,8 +50,8 @@ impl<'a> Decklist<'a> {
                 if card.has_cabs() {
                     display_tags.push("CABS".to_string());
                 }
-                let mut sbread = card.extract_sbread();
-                display_tags.append(&mut sbread);
+                let sbread = card.extract_sbread();
+                display_tags.extend(sbread.iter().map(|t| t.to_string()));
                 
                 let tags_str = if display_tags.is_empty() { String::new() } else { format!(" [{}]", display_tags.join(", ")) };
                 
@@ -98,9 +98,9 @@ impl DeckBuilder {
 
         // Helper to determine optimal copies
         let determine_copies = |s: &ScoredCard, max_allowed: usize| -> usize {
-            let base_copies = if s.sbread.contains(&"Bomb".to_string()) {
+            let base_copies = if s.sbread.contains(&SbreadTag::Bomb) {
                 1
-            } else if s.sbread.contains(&"Removal".to_string()) || s.sbread.contains(&"Evasion".to_string()) || s.sbread.contains(&"Dump".to_string()) {
+            } else if s.sbread.contains(&SbreadTag::Removal) || s.sbread.contains(&SbreadTag::Evasion) || s.sbread.contains(&SbreadTag::Dump) {
                 2
             } else {
                 // High synergy, aggro, core combo pieces
@@ -140,7 +140,7 @@ impl DeckBuilder {
             if deck_cards.iter().any(|(c, _)| c.name == s.card.name) { continue; }
             if !s.cabs { continue; }
             
-            if s.sbread.contains(&"Bomb".to_string()) {
+            if s.sbread.contains(&SbreadTag::Bomb) {
                 let allowed = std::cmp::min(max_bombs - bombs_added, target_size - total_added);
                 let to_add = determine_copies(s, allowed);
                 if to_add > 0 {
@@ -158,7 +158,7 @@ impl DeckBuilder {
             if deck_cards.iter().any(|(c, _)| c.name == s.card.name) { continue; }
             if !s.cabs { continue; }
             
-            if s.sbread.contains(&"Removal".to_string()) {
+            if s.sbread.contains(&SbreadTag::Removal) {
                 let allowed = std::cmp::min(max_removal - removal_added, target_size - total_added);
                 let to_add = determine_copies(s, allowed);
                 if to_add > 0 {
@@ -176,7 +176,7 @@ impl DeckBuilder {
             if deck_cards.iter().any(|(c, _)| c.name == s.card.name) { continue; }
             if !s.cabs { continue; }
             
-            if s.sbread.contains(&"Evasion".to_string()) {
+            if s.sbread.contains(&SbreadTag::Evasion) {
                 let allowed = std::cmp::min(max_evasion - evasion_added, target_size - total_added);
                 let to_add = determine_copies(s, allowed);
                 if to_add > 0 {
@@ -194,7 +194,7 @@ impl DeckBuilder {
             if deck_cards.iter().any(|(c, _)| c.name == s.card.name) { continue; }
             if !s.cabs { continue; }
             
-            if s.sbread.contains(&"Aggro".to_string()) {
+            if s.sbread.contains(&SbreadTag::Aggro) {
                 let allowed = std::cmp::min(max_aggro - aggro_added, target_size - total_added);
                 let to_add = determine_copies(s, allowed);
                 if to_add > 0 {
@@ -216,7 +216,7 @@ impl DeckBuilder {
                 continue; 
             }
 
-            if s.sbread.contains(&"Dump".to_string()) || is_ramp {
+            if s.sbread.contains(&SbreadTag::Dump) || is_ramp {
                 let allowed = std::cmp::min(max_dump - dump_added, target_size - total_added);
                 let to_add = determine_copies(s, allowed);
                 if to_add > 0 {
