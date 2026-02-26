@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 pub struct Card {
     pub name: String,
     pub text: Option<String>,
+    pub energy: Option<u32>,
     #[serde(default)]
     pub domains: Vec<Domain>,
     #[serde(rename = "cardType", default)]
@@ -23,6 +24,19 @@ pub struct CardType {
 }
 
 impl Card {
+    pub fn is_type(&self, label_to_match: &str) -> bool {
+        self.card_type.iter().any(|t| t.label.to_lowercase() == label_to_match.to_lowercase())
+    }
+
+    pub fn primary_domain_string(&self) -> String {
+        if self.domains.is_empty() {
+            return "Neutral".to_string();
+        }
+        let mut labels: Vec<String> = self.domains.iter().map(|d| d.label.clone()).collect();
+        labels.sort();
+        labels.join(", ")
+    }
+
     pub fn extract_keywords(&self) -> Vec<String> {
         let mut keywords = Vec::new();
         
@@ -109,7 +123,28 @@ impl Card {
             if t.contains("[mighty]") || t.contains("5+ :rb_might:") || t.contains("might:") {
                 mechanics.push("MightyConsumer".to_string());
             }
+
+            // Meta Mechanics
+            if t.contains("token") || t.contains("summon") {
+                mechanics.push("TokenSpawner".to_string());
+            }
+            if self.is_type("Spell") && (t.contains("deal ") || t.contains("damage")) {
+                mechanics.push("SpellDamage".to_string());
+            }
+            if t.contains("ready") || t.contains("assault") {
+                mechanics.push("AggroTool".to_string());
+            }
         }
+        
+        // High cost unit
+        if self.is_type("Unit") {
+            if let Some(cost) = self.energy {
+                if cost >= 7 {
+                    mechanics.push("HighCostUnit".to_string());
+                }
+            }
+        }
+
         mechanics
     }
 }

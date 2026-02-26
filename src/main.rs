@@ -28,14 +28,18 @@ fn load_cards() -> &'static Vec<Card> {
     })
 }
 
-fn find_card<'a>(name: &str, cards: &'a [Card]) -> Result<&'a Card, Vec<&'a String>> {
-    let exact_match = cards.iter().find(|c| c.name.to_lowercase() == name.to_lowercase());
+fn find_card<'a>(name: &str, cards: &'a [Card], expected_type: &str) -> Result<&'a Card, Vec<&'a String>> {
+    let filtered_cards: Vec<&Card> = cards.iter()
+        .filter(|c| c.is_type(expected_type))
+        .collect();
+
+    let exact_match = filtered_cards.iter().find(|c| c.name.to_lowercase() == name.to_lowercase());
     if let Some(card) = exact_match {
         return Ok(card);
     }
 
     // Fuzzy matching
-    let mut distances: Vec<(&String, usize)> = cards.iter()
+    let mut distances: Vec<(&String, usize)> = filtered_cards.iter()
         .map(|c| (&c.name, levenshtein(&c.name.to_lowercase(), &name.to_lowercase())))
         .collect();
     
@@ -48,7 +52,7 @@ fn main() {
     let args = Args::parse();
     let cards = load_cards();
 
-    let legend_card = match find_card(&args.legend, cards) {
+    let legend_card = match find_card(&args.legend, cards, "Legend") {
         Ok(c) => c,
         Err(suggestions) => {
             eprintln!("Error: Legend '{}' not found.", args.legend);
@@ -57,7 +61,7 @@ fn main() {
         }
     };
 
-    let champion_card = match find_card(&args.champion, cards) {
+    let champion_card = match find_card(&args.champion, cards, "Unit") {
         Ok(c) => c,
         Err(suggestions) => {
             eprintln!("Error: Champion '{}' not found.", args.champion);
@@ -77,6 +81,7 @@ fn main() {
     println!("Legend Domains: {:?}", legend_domains);
 
     let scorer = SynergyScorer::new(legend_card, champion_card);
+    println!("Detected Meta Archetype: {:?}", scorer.archetype);
 
     let mut seen_names = HashSet::new();
     let candidates: Vec<Card> = cards
@@ -85,8 +90,6 @@ fn main() {
         // Domain filter: all of the candidate's domains must be in the legend's domains
         .filter(|c| {
             let card_domains: HashSet<String> = c.domains.iter().map(|d| d.label.to_lowercase()).collect();
-            // In Riftbound, Neutral/Colorless might have 0 domains, which is always a subset.
-            // If the card has domains, they must all be in the Legend's domains.
             card_domains.is_subset(&legend_domains)
         })
         .filter(|c| seen_names.insert(c.name.clone()))
@@ -115,8 +118,19 @@ fn main() {
     let champ_mechs: HashSet<String> = champion_card.extract_deep_mechanics().into_iter().collect();
     let legend_mechs: HashSet<String> = legend_card.extract_deep_mechanics().into_iter().collect();
 
+    let mut current_domain_group = String::new();
+
     for result in &scored {
-        println!("\n=== {} (Score: {}) ===", result.card.name, result.score);
+        let domain_str = result.card.primary_domain_string();
+        if domain_str != current_domain_group {
+            println!("\n========================================");
+            println!("  DOMAIN: {}", domain_str);
+            println!("========================================");
+            current_domain_group = domain_str;
+        }
+
+        let meta_tag = if result.meta_bonus { " [META SYNERGY]" } else { "" };
+        println!("\n=== {} (Score: {}){} ===", result.card.name, result.score, meta_tag);
         if !result.matched_keywords.is_empty() {
             println!("  [Keywords]: {}", result.matched_keywords.join(", "));
         }

@@ -1,6 +1,32 @@
 use std::collections::HashSet;
 use crate::models::Card;
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum Archetype {
+    AggroTempo,
+    SpellslingerControl,
+    ComboCheat,
+    TokenFlood,
+    Midrange,
+}
+
+impl Archetype {
+    pub fn determine(champion_name: &str) -> Self {
+        let name = champion_name.to_lowercase();
+        if name.contains("draven") || name.contains("irelia") || name.contains("annie") || name.contains("yasuo") {
+            Archetype::AggroTempo
+        } else if name.contains("kai'sa") || name.contains("ezreal") || name.contains("karma") {
+            Archetype::SpellslingerControl
+        } else if name.contains("miss fortune") {
+            Archetype::ComboCheat
+        } else if name.contains("viktor") || name.contains("azir") {
+            Archetype::TokenFlood
+        } else {
+            Archetype::Midrange
+        }
+    }
+}
+
 pub struct SynergyScorer {
     legend_keywords: HashSet<String>,
     champion_keywords: HashSet<String>,
@@ -8,6 +34,7 @@ pub struct SynergyScorer {
     champion_interactions: HashSet<String>,
     legend_triggers: HashSet<String>,
     champion_triggers: HashSet<String>,
+    pub archetype: Archetype,
 }
 
 #[derive(Debug)]
@@ -17,6 +44,7 @@ pub struct ScoredCard<'a> {
     pub matched_keywords: Vec<String>,
     pub matched_interactions: Vec<String>,
     pub matched_triggers: Vec<String>,
+    pub meta_bonus: bool,
 }
 
 impl SynergyScorer {
@@ -30,6 +58,8 @@ impl SynergyScorer {
         let legend_triggers: HashSet<String> = legend.extract_triggers().into_iter().collect();
         let champion_triggers: HashSet<String> = champion.extract_triggers().into_iter().collect();
 
+        let archetype = Archetype::determine(&champion.name);
+
         Self {
             legend_keywords,
             champion_keywords,
@@ -37,6 +67,7 @@ impl SynergyScorer {
             champion_interactions,
             legend_triggers,
             champion_triggers,
+            archetype,
         }
     }
 
@@ -44,6 +75,7 @@ impl SynergyScorer {
         let candidate_keywords: HashSet<String> = candidate.extract_keywords().into_iter().collect();
         let candidate_interactions: HashSet<String> = candidate.extract_interactions().into_iter().collect();
         let candidate_triggers: HashSet<String> = candidate.extract_triggers().into_iter().collect();
+        let candidate_mechs: HashSet<String> = candidate.extract_deep_mechanics().into_iter().collect();
         
         let mut matched_keywords: HashSet<String> = HashSet::new();
         for k in candidate_keywords.intersection(&self.legend_keywords) { matched_keywords.insert(k.clone()); }
@@ -72,6 +104,35 @@ impl SynergyScorer {
             score += 2;
         }
 
+        let mut meta_bonus = false;
+        match self.archetype {
+            Archetype::AggroTempo => {
+                if candidate_mechs.contains("AggroTool") {
+                    score += 5;
+                    meta_bonus = true;
+                }
+            }
+            Archetype::SpellslingerControl => {
+                if candidate_mechs.contains("SpellDamage") {
+                    score += 5;
+                    meta_bonus = true;
+                }
+            }
+            Archetype::ComboCheat => {
+                if candidate_mechs.contains("HighCostUnit") {
+                    score += 5;
+                    meta_bonus = true;
+                }
+            }
+            Archetype::TokenFlood => {
+                if candidate_mechs.contains("TokenSpawner") {
+                    score += 5;
+                    meta_bonus = true;
+                }
+            }
+            Archetype::Midrange => {}
+        }
+
         let mut mk_vec: Vec<String> = matched_keywords.into_iter().collect();
         mk_vec.sort();
         let mut mi_vec: Vec<String> = matched_interactions.into_iter().collect();
@@ -85,6 +146,7 @@ impl SynergyScorer {
             matched_keywords: mk_vec,
             matched_interactions: mi_vec,
             matched_triggers: mt_vec,
+            meta_bonus,
         }
     }
 
@@ -92,10 +154,16 @@ impl SynergyScorer {
         let mut scored: Vec<ScoredCard<'a>> = cards
             .iter()
             .map(|c| self.score_card(c))
-            .filter(|s| s.score > 0)
+            .filter(|s| s.score > 0 || s.meta_bonus) // Keep if it has meta bonus even if score was 0
             .collect();
             
-        scored.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.card.name.cmp(&b.card.name)));
+        // Sort by Domain, then Meta Bonus, then Score descending
+        scored.sort_by(|a, b| {
+            a.card.primary_domain_string().cmp(&b.card.primary_domain_string())
+                .then_with(|| b.meta_bonus.cmp(&a.meta_bonus))
+                .then_with(|| b.score.cmp(&a.score))
+                .then_with(|| a.card.name.cmp(&b.card.name))
+        });
         
         scored
     }
