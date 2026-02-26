@@ -57,4 +57,41 @@ impl Card {
         
         keywords
     }
+
+    pub fn extract_interactions(&self) -> Vec<String> {
+        let mut interactions = Vec::new();
+        if let Some(text) = &self.text {
+            let t = text.to_lowercase();
+            let verbs = [
+                "draw", "discard", "damage", "heal", "exhaust", "ready", "buff", "destroy",
+                "strike", "summon", "token", "prevent", "pay", "return", "reveal", "choose"
+            ];
+            for v in verbs {
+                if t.contains(v) {
+                    interactions.push(v.to_string());
+                }
+            }
+        }
+        interactions.sort();
+        interactions.dedup();
+        interactions
+    }
+
+    pub fn extract_triggers(&self) -> Vec<String> {
+        let mut triggers = Vec::new();
+        if let Some(text) = &self.text {
+            let t = text.to_lowercase();
+            let patterns = [
+                "when you play", "when this enters", "when you discard", "reaction", "action", "if you", "after", "before", "when you draw"
+            ];
+            for p in patterns {
+                if t.contains(p) {
+                    triggers.push(p.to_string());
+                }
+            }
+        }
+        triggers.sort();
+        triggers.dedup();
+        triggers
+    }
 }
