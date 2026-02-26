@@ -96,17 +96,34 @@ impl DeckBuilder {
         // Sort by score descending
         valid_candidates.sort_by(|a, b| b.score.cmp(&a.score));
 
+        // Helper to determine optimal copies
+        let determine_copies = |s: &ScoredCard, max_allowed: usize| -> usize {
+            let base_copies = if s.sbread.contains(&"Bomb".to_string()) {
+                1
+            } else if s.sbread.contains(&"Removal".to_string()) || s.sbread.contains(&"Evasion".to_string()) || s.sbread.contains(&"Dump".to_string()) {
+                2
+            } else {
+                // High synergy, aggro, core combo pieces
+                3
+            };
+            std::cmp::min(base_copies, max_allowed)
+        };
+
         // Pass 1 (S - Synergy Core): Add top 8 highest scoring cards that have CABS
         let mut core_added_count = 0;
         for s in &valid_candidates {
             if total_added >= target_size || core_added_count >= 8 { break; }
             if !s.cabs { continue; }
             
-            let to_add = std::cmp::min(3, target_size - total_added);
-            deck_cards.push((s.card, to_add));
-            total_added += to_add;
-            total_power += s.card.power.unwrap_or(0) as usize * to_add;
-            core_added_count += 1;
+            let allowed = target_size - total_added;
+            let to_add = determine_copies(s, allowed);
+            
+            if to_add > 0 {
+                deck_cards.push((s.card, to_add));
+                total_added += to_add;
+                total_power += s.card.power.unwrap_or(0) as usize * to_add;
+                core_added_count += 1;
+            }
         }
 
         // Pass 2 (B - Bombs)
@@ -116,7 +133,8 @@ impl DeckBuilder {
             if !s.cabs { continue; }
             
             if s.sbread.contains(&"Bomb".to_string()) {
-                let to_add = std::cmp::min(std::cmp::min(3, max_bombs - bombs_added), target_size - total_added);
+                let allowed = std::cmp::min(max_bombs - bombs_added, target_size - total_added);
+                let to_add = determine_copies(s, allowed);
                 if to_add > 0 {
                     deck_cards.push((s.card, to_add));
                     total_added += to_add;
@@ -133,7 +151,8 @@ impl DeckBuilder {
             if !s.cabs { continue; }
             
             if s.sbread.contains(&"Removal".to_string()) {
-                let to_add = std::cmp::min(std::cmp::min(3, max_removal - removal_added), target_size - total_added);
+                let allowed = std::cmp::min(max_removal - removal_added, target_size - total_added);
+                let to_add = determine_copies(s, allowed);
                 if to_add > 0 {
                     deck_cards.push((s.card, to_add));
                     total_added += to_add;
@@ -150,7 +169,8 @@ impl DeckBuilder {
             if !s.cabs { continue; }
             
             if s.sbread.contains(&"Evasion".to_string()) {
-                let to_add = std::cmp::min(std::cmp::min(3, max_evasion - evasion_added), target_size - total_added);
+                let allowed = std::cmp::min(max_evasion - evasion_added, target_size - total_added);
+                let to_add = determine_copies(s, allowed);
                 if to_add > 0 {
                     deck_cards.push((s.card, to_add));
                     total_added += to_add;
@@ -167,7 +187,8 @@ impl DeckBuilder {
             if !s.cabs { continue; }
             
             if s.sbread.contains(&"Aggro".to_string()) {
-                let to_add = std::cmp::min(std::cmp::min(3, max_aggro - aggro_added), target_size - total_added);
+                let allowed = std::cmp::min(max_aggro - aggro_added, target_size - total_added);
+                let to_add = determine_copies(s, allowed);
                 if to_add > 0 {
                     deck_cards.push((s.card, to_add));
                     total_added += to_add;
@@ -188,7 +209,8 @@ impl DeckBuilder {
             }
 
             if s.sbread.contains(&"Dump".to_string()) || is_ramp {
-                let to_add = std::cmp::min(std::cmp::min(3, max_dump - dump_added), target_size - total_added);
+                let allowed = std::cmp::min(max_dump - dump_added, target_size - total_added);
+                let to_add = determine_copies(s, allowed);
                 if to_add > 0 {
                     deck_cards.push((s.card, to_add));
                     total_added += to_add;
@@ -204,10 +226,13 @@ impl DeckBuilder {
                 if total_added >= target_size { break; }
                 if deck_cards.iter().any(|(c, _)| c.name == s.card.name) { continue; }
                 
-                let to_add = std::cmp::min(3, target_size - total_added);
-                deck_cards.push((s.card, to_add));
-                total_added += to_add;
-                total_power += s.card.power.unwrap_or(0) as usize * to_add;
+                let allowed = target_size - total_added;
+                let to_add = determine_copies(s, allowed);
+                if to_add > 0 {
+                    deck_cards.push((s.card, to_add));
+                    total_added += to_add;
+                    total_power += s.card.power.unwrap_or(0) as usize * to_add;
+                }
             }
         }
 
