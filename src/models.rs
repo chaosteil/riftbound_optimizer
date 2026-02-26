@@ -5,6 +5,7 @@ pub struct Card {
     pub name: String,
     pub text: Option<String>,
     pub energy: Option<u32>,
+    pub power: Option<u32>,
     #[serde(default)]
     pub domains: Vec<Domain>,
     #[serde(rename = "cardType", default)]
@@ -35,6 +36,22 @@ impl Card {
         let mut labels: Vec<String> = self.domains.iter().map(|d| d.label.clone()).collect();
         labels.sort();
         labels.join(", ")
+    }
+
+    pub fn clean_text(&self) -> String {
+        if let Some(ref text) = self.text {
+            // Strip common HTML tags used in the JSON
+            let mut s = text.replace("<p>", "");
+            s = s.replace("</p>", "\n");
+            s = s.replace("<br />", "\n");
+            s = s.replace("<em>", "");
+            s = s.replace("</em>", "");
+            s = s.replace("<strong>", "");
+            s = s.replace("</strong>", "");
+            s.trim().to_string()
+        } else {
+            "No text".to_string()
+        }
     }
 
     pub fn extract_keywords(&self) -> Vec<String> {

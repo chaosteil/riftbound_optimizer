@@ -8,8 +8,12 @@ pub fn analyze_and_print(scored: &[ScoredCard], legend_card: &Card, champion_car
         return;
     }
 
-    println!("
---- Synergistic Cards ---");
+    println!("\n--- Synergistic Cards ---");
+    println!("Legend: {}", legend_card.name);
+    println!("  Text: {}", legend_card.clean_text().replace('\n', "\n        "));
+    println!("Champion: {}", champion_card.name);
+    println!("  Cost: {}E / {}P", champion_card.energy.unwrap_or(0), champion_card.power.unwrap_or(0));
+    println!("  Text: {}", champion_card.clean_text().replace('\n', "\n        "));
     
     // Cross synergy analysis
     // Pre-extract interactions/triggers for scored cards for faster comparison
@@ -29,16 +33,17 @@ pub fn analyze_and_print(scored: &[ScoredCard], legend_card: &Card, champion_car
     for result in scored {
         let domain_str = result.card.primary_domain_string();
         if domain_str != current_domain_group {
-            println!("
-========================================");
+            println!("\n========================================");
             println!("  DOMAIN: {}", domain_str);
             println!("========================================");
             current_domain_group = domain_str;
         }
 
         let meta_tag = if result.meta_bonus { " [META SYNERGY]" } else { "" };
-        println!("
-=== {} (Score: {}){} ===", result.card.name, result.score, meta_tag);
+        println!("\n=== {} (Score: {}){} ===", result.card.name, result.score, meta_tag);
+        println!("  [Cost]: {}E / {}P", result.card.energy.unwrap_or(0), result.card.power.unwrap_or(0));
+        println!("  [Text]: {}", result.card.clean_text().replace('\n', "\n          "));
+
         if !result.matched_keywords.is_empty() {
             println!("  [Keywords]: {}", result.matched_keywords.join(", "));
         }
