@@ -6,6 +6,7 @@ pub struct Decklist<'a> {
     pub legend: &'a Card,
     pub champion: &'a Card,
     pub cards: Vec<(&'a Card, usize)>, // Card and quantity (1-3)
+    pub total_power: usize,
 }
 
 impl<'a> Decklist<'a> {
@@ -19,10 +20,9 @@ impl<'a> Decklist<'a> {
         println!("--------------------------");
         
         let total_cards: usize = self.cards.iter().map(|(_, count)| count).sum();
-        let total_power: usize = self.cards.iter().map(|(c, count)| c.power.unwrap_or(0) as usize * count).sum();
         // Plus 1 for the champion which is technically in the deck but starts in champion zone
         println!("Total Main Deck Cards: {} / 40", total_cards + 1); 
-        println!("Total Deck Power Requirement: {}", total_power + self.champion.power.unwrap_or(0) as usize);
+        println!("Total Deck Power Requirement: {}", self.total_power);
         println!("--------------------------");
 
         // Group by cost
@@ -248,6 +248,7 @@ impl DeckBuilder {
             legend,
             champion,
             cards: deck_cards,
+            total_power,
         }
     }
 }

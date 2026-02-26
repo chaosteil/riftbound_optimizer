@@ -195,13 +195,11 @@ impl Card {
         }
         
         // High cost unit
-        if self.is_type("Unit") {
-            if let Some(cost) = self.energy {
-                if cost >= 7 {
+        if self.is_type("Unit")
+            && let Some(cost) = self.energy
+                && cost >= 7 {
                     mechanics.push("HighCostUnit".to_string());
                 }
-            }
-        }
 
         mechanics
     }

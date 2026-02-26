@@ -69,25 +69,23 @@ fn load_collection(path: &str) -> HashMap<String, usize> {
     });
 
     let reader = std::io::BufReader::new(file);
-    for line in reader.lines() {
-        if let Ok(line) = line {
-            let trimmed = line.trim();
-            if trimmed.is_empty() { continue; }
+    for line in reader.lines().map_while(Result::ok) {
+        let trimmed = line.trim();
+        if trimmed.is_empty() { continue; }
 
-            // parse "3x Card Name" or "Card Name"
-            let mut parts = trimmed.splitn(2, 'x');
-            let first = parts.next().unwrap().trim();
-            let second = parts.next();
+        // parse "3x Card Name" or "Card Name"
+        let mut parts = trimmed.splitn(2, 'x');
+        let first = parts.next().unwrap().trim();
+        let second = parts.next();
 
-            if let Some(rest) = second {
-                if let Ok(count) = first.parse::<usize>() {
-                    collection.insert(rest.trim().to_lowercase(), count);
-                } else {
-                    collection.insert(trimmed.to_lowercase(), 3); // Default max if "x" is part of a name but not a quantity
-                }
+        if let Some(rest) = second {
+            if let Ok(count) = first.parse::<usize>() {
+                collection.insert(rest.trim().to_lowercase(), count);
             } else {
-                collection.insert(first.to_lowercase(), 3); // Default max copies if no quantity specified
+                collection.insert(trimmed.to_lowercase(), 3); // Default max if "x" is part of a name but not a quantity
             }
+        } else {
+            collection.insert(first.to_lowercase(), 3); // Default max copies if no quantity specified
         }
     }
     collection
