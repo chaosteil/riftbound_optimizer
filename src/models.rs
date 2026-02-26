@@ -94,4 +94,22 @@ impl Card {
         triggers.dedup();
         triggers
     }
+
+    pub fn extract_deep_mechanics(&self) -> Vec<String> {
+        let mut mechanics = Vec::new();
+        if let Some(text) = &self.text {
+            let t = text.to_lowercase();
+            
+            // Check if it's a Buff Source
+            if t.contains("buff") || t.contains("+1 :rb_might:") || t.contains("+2 :rb_might:") || t.contains("+3 :rb_might:") || t.contains("+4 :rb_might:") || t.contains("[assault") {
+                mechanics.push("BuffSource".to_string());
+            }
+
+            // Check if it's a Mighty / Buff Target
+            if t.contains("[mighty]") || t.contains("5+ :rb_might:") || t.contains("might:") {
+                mechanics.push("MightyConsumer".to_string());
+            }
+        }
+        mechanics
+    }
 }
