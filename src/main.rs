@@ -5,12 +5,14 @@ mod analyzer;
 mod builder;
 
 use clap::{Parser, Subcommand};
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use models::Card;
 use engine::SynergyScorer;
 use search::find_card;
 use analyzer::analyze_and_print;
 use builder::DeckBuilder;
+
+use std::io::BufRead;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Riftbound Synergy Optimizer", long_about = None)]
@@ -28,6 +30,9 @@ enum Commands {
 
         #[arg(short, long, help = "Name of the Champion card")]
         champion: String,
+
+        #[arg(long, help = "Path to a text file containing your card collection (e.g. '3x Card Name')")]
+        collection: Option<String>,
     },
     /// Generate a 40-card sample deck for a given Legend and Champion
     Deck {
@@ -36,6 +41,9 @@ enum Commands {
 
         #[arg(short, long, help = "Name of the Champion card")]
         champion: String,
+
+        #[arg(long, help = "Path to a text file containing your card collection (e.g. '3x Card Name')")]
+        collection: Option<String>,
     },
     /// Refresh the local cards.json database from the latest online data
     Update,
@@ -51,6 +59,38 @@ fn load_cards() -> Vec<Card> {
         eprintln!("Error parsing cards.json: {}", e);
         std::process::exit(1);
     })
+}
+
+fn load_collection(path: &str) -> HashMap<String, usize> {
+    let mut collection = HashMap::new();
+    let file = std::fs::File::open(path).unwrap_or_else(|e| {
+        eprintln!("Error opening collection file '{}': {}", path, e);
+        std::process::exit(1);
+    });
+
+    let reader = std::io::BufReader::new(file);
+    for line in reader.lines() {
+        if let Ok(line) = line {
+            let trimmed = line.trim();
+            if trimmed.is_empty() { continue; }
+
+            // parse "3x Card Name" or "Card Name"
+            let mut parts = trimmed.splitn(2, 'x');
+            let first = parts.next().unwrap().trim();
+            let second = parts.next();
+
+            if let Some(rest) = second {
+                if let Ok(count) = first.parse::<usize>() {
+                    collection.insert(rest.trim().to_lowercase(), count);
+                } else {
+                    collection.insert(trimmed.to_lowercase(), 3); // Default max if "x" is part of a name but not a quantity
+                }
+            } else {
+                collection.insert(first.to_lowercase(), 3); // Default max copies if no quantity specified
+            }
+        }
+    }
+    collection
 }
 
 fn handle_update() {
@@ -82,7 +122,7 @@ fn main() {
         Commands::Update => {
             handle_update();
         }
-        Commands::Optimize { legend, champion } => {
+        Commands::Optimize { legend, champion, collection } => {
             let cards = load_cards();
 
             let legend_card = match find_card(&legend, &cards, "Legend") {
@@ -102,6 +142,8 @@ fn main() {
                     std::process::exit(1);
                 }
             };
+
+            let owned_cards = collection.map(|path| load_collection(&path));
 
             println!("Found Legend: {}", legend_card.name);
             println!("Found Champion: {}", champion_card.name);
@@ -126,6 +168,14 @@ fn main() {
                     card_domains.is_subset(&legend_domains)
                 })
                 .filter(|c| seen_names.insert(c.name.clone()))
+                .filter(|c| {
+                    // If collection is provided, ensure card is in it
+                    if let Some(ref owned) = owned_cards {
+                        owned.contains_key(&c.name.to_lowercase())
+                    } else {
+                        true
+                    }
+                })
                 .cloned()
                 .collect();
 
@@ -133,7 +183,7 @@ fn main() {
             
             analyze_and_print(&scored, legend_card, champion_card);
         }
-        Commands::Deck { legend, champion } => {
+        Commands::Deck { legend, champion, collection } => {
             let cards = load_cards();
 
             let legend_card = match find_card(&legend, &cards, "Legend") {
@@ -154,6 +204,8 @@ fn main() {
                 }
             };
 
+            let owned_cards = collection.map(|path| load_collection(&path));
+
             let legend_domains: HashSet<String> = legend_card.domains.iter()
                 .map(|d| d.label.to_lowercase())
                 .collect();
@@ -169,12 +221,20 @@ fn main() {
                     card_domains.is_subset(&legend_domains)
                 })
                 .filter(|c| seen_names.insert(c.name.clone()))
+                .filter(|c| {
+                    // If collection is provided, ensure card is in it
+                    if let Some(ref owned) = owned_cards {
+                        owned.contains_key(&c.name.to_lowercase())
+                    } else {
+                        true
+                    }
+                })
                 .cloned()
                 .collect();
 
             let scored = scorer.evaluate(&candidates);
             
-            let deck = DeckBuilder::build(legend_card, champion_card, &scored);
+            let deck = DeckBuilder::build(legend_card, champion_card, &scored, owned_cards.as_ref());
             deck.print();
         }
     }

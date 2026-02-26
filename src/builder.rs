@@ -65,7 +65,7 @@ impl<'a> Decklist<'a> {
 pub struct DeckBuilder;
 
 impl DeckBuilder {
-    pub fn build<'a>(legend: &'a Card, champion: &'a Card, scored: &[ScoredCard<'a>]) -> Decklist<'a> {
+    pub fn build<'a>(legend: &'a Card, champion: &'a Card, scored: &[ScoredCard<'a>], collection_limits: Option<&HashMap<String, usize>>) -> Decklist<'a> {
         let mut deck_cards: Vec<(&'a Card, usize)> = Vec::new();
         let mut total_added = 0;
         let mut total_power = champion.power.unwrap_or(0) as usize;
@@ -106,7 +106,15 @@ impl DeckBuilder {
                 // High synergy, aggro, core combo pieces
                 3
             };
-            std::cmp::min(base_copies, max_allowed)
+            
+            let requested_copies = std::cmp::min(base_copies, max_allowed);
+            
+            if let Some(owned) = collection_limits {
+                let owned_count = owned.get(&s.card.name.to_lowercase()).copied().unwrap_or(0);
+                std::cmp::min(requested_copies, owned_count)
+            } else {
+                requested_copies
+            }
         };
 
         // Pass 1 (S - Synergy Core): Add top 8 highest scoring cards that have CABS
