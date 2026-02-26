@@ -89,6 +89,47 @@ impl Card {
         keywords
     }
 
+    pub fn has_cabs(&self) -> bool {
+        if self.is_type("Unit") || self.is_type("Gear") {
+            return true;
+        }
+        if self.is_type("Spell") {
+            let t = self.clean_text().to_lowercase();
+            return t.contains("deal") || t.contains("destroy") || t.contains("buff") 
+                || t.contains("summon") || t.contains("exhaust") || t.contains("ready") 
+                || t.contains("recycle");
+        }
+        false
+    }
+
+    pub fn extract_sbread(&self) -> Vec<String> {
+        let mut tags = Vec::new();
+        let t = self.clean_text().to_lowercase();
+        let energy = self.energy.unwrap_or(0);
+
+        if self.is_type("Unit") && energy >= 6 {
+            tags.push("Bomb".to_string());
+        }
+
+        if t.contains("deal ") || t.contains("destroy") || t.contains("recycle") {
+            tags.push("Removal".to_string());
+        }
+
+        if t.contains("[ganking]") || t.contains("[deflect]") || t.contains("[hidden]") || t.contains("[shield]") {
+            tags.push("Evasion".to_string());
+        }
+
+        if self.is_type("Unit") && energy <= 2 && (self.power.unwrap_or(0) > 0 || t.contains("[assault") || t.contains("ready")) {
+            tags.push("Aggro".to_string());
+        }
+
+        if t.contains("draw") {
+            tags.push("Dump".to_string());
+        }
+
+        tags
+    }
+
     pub fn extract_interactions(&self) -> Vec<String> {
         let mut interactions = Vec::new();
         if let Some(text) = &self.text {

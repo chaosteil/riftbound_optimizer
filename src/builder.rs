@@ -45,7 +45,17 @@ impl<'a> Decklist<'a> {
 
             for (card, count) in sorted_group {
                 let type_label = if card.is_type("Unit") { "Unit" } else if card.is_type("Spell") { "Spell" } else { "Gear" };
-                println!("  {}x {} ({}) [{}E / {}P]", count, card.name, type_label, card.energy.unwrap_or(0), card.power.unwrap_or(0));
+                
+                let mut display_tags = Vec::new();
+                if card.has_cabs() {
+                    display_tags.push("CABS".to_string());
+                }
+                let mut sbread = card.extract_sbread();
+                display_tags.append(&mut sbread);
+                
+                let tags_str = if display_tags.is_empty() { String::new() } else { format!(" [{}]", display_tags.join(", ")) };
+                
+                println!("  {}x {} ({}) [{}E / {}P]{}", count, card.name, type_label, card.energy.unwrap_or(0), card.power.unwrap_or(0), tags_str);
                 println!("      {}", card.clean_text().replace('\n', "\n      "));
             }
         }
@@ -61,83 +71,143 @@ impl DeckBuilder {
         let mut total_power = champion.power.unwrap_or(0) as usize;
         let target_size = 39; // 40 - 1 (the chosen champion)
 
-        // Ideal curve buckets (target ranges)
-        let mut buckets: HashMap<u32, Vec<&'a Card>> = HashMap::new();
-        for s in scored {
-            if s.card.name == legend.name || s.card.name == champion.name {
-                continue;
-            }
+        // Quotas for SBREAD
+        let max_bombs = 4;
+        let mut bombs_added = 0;
+        
+        let max_removal = 6;
+        let mut removal_added = 0;
+        
+        let max_evasion = 5;
+        let mut evasion_added = 0;
+        
+        let max_aggro = 8;
+        let mut aggro_added = 0;
+        
+        let max_dump = 4;
+        let mut dump_added = 0;
 
-            if !s.card.is_type("Unit") && !s.card.is_type("Spell") && !s.card.is_type("Gear") {
-                continue;
-            }
+        // Filter valid candidates first
+        let mut valid_candidates: Vec<&ScoredCard<'a>> = scored.iter()
+            .filter(|s| s.card.name != legend.name && s.card.name != champion.name)
+            .filter(|s| s.card.is_type("Unit") || s.card.is_type("Spell") || s.card.is_type("Gear"))
+            .collect();
+            
+        // Sort by score descending
+        valid_candidates.sort_by(|a, b| b.score.cmp(&a.score));
 
-            let cost = s.card.energy.unwrap_or(0);
-            let bucket_key = if cost >= 5 { 5 } else { cost };
-            buckets.entry(bucket_key).or_default().push(s.card);
+        // Pass 1 (S - Synergy Core): Add top 8 highest scoring cards that have CABS
+        let mut core_added_count = 0;
+        for s in &valid_candidates {
+            if total_added >= target_size || core_added_count >= 8 { break; }
+            if !s.cabs { continue; }
+            
+            let to_add = std::cmp::min(3, target_size - total_added);
+            deck_cards.push((s.card, to_add));
+            total_added += to_add;
+            total_power += s.card.power.unwrap_or(0) as usize * to_add;
+            core_added_count += 1;
         }
 
-        let mut fill_bucket = |bucket_key: u32, target: usize, deck_cards: &mut Vec<(&'a Card, usize)>, total_added: &mut usize, total_power: &mut usize| {
-            if let Some(cards) = buckets.get(&bucket_key) {
-                let mut added_in_bucket = 0;
-                for &card in cards {
-                    if *total_added >= target_size || added_in_bucket >= target { break; }
-                    
-                    let space_left_in_deck = target_size - *total_added;
-                    let space_left_in_bucket = target - added_in_bucket;
-                    
-                    // Filter logic: if it's a "Seal" (ramp card) and we don't have high power costs yet, skip it.
-                    // Assuming a deck needs ramp if its average power cost is shaping up to be high (> 10 total so far)
-                    let is_ramp = card.name.starts_with("Seal of") || card.clean_text().to_lowercase().contains("gold token");
-                    if is_ramp && *total_power < 10 && *total_added > 15 {
-                        continue; 
-                    }
-
-                    // Max 3 copies per card
-                    let to_add = std::cmp::min(3, std::cmp::min(space_left_in_deck, space_left_in_bucket));
-                    if to_add > 0 {
-                        deck_cards.push((card, to_add));
-                        *total_added += to_add;
-                        added_in_bucket += to_add;
-                        *total_power += card.power.unwrap_or(0) as usize * to_add;
-                    }
+        // Pass 2 (B - Bombs)
+        for s in &valid_candidates {
+            if total_added >= target_size || bombs_added >= max_bombs { break; }
+            if deck_cards.iter().any(|(c, _)| c.name == s.card.name) { continue; }
+            if !s.cabs { continue; }
+            
+            if s.sbread.contains(&"Bomb".to_string()) {
+                let to_add = std::cmp::min(std::cmp::min(3, max_bombs - bombs_added), target_size - total_added);
+                if to_add > 0 {
+                    deck_cards.push((s.card, to_add));
+                    total_added += to_add;
+                    total_power += s.card.power.unwrap_or(0) as usize * to_add;
+                    bombs_added += to_add;
                 }
             }
-        };
+        }
 
-        // 1. Fill 2-drops first (Priority)
-        fill_bucket(2, 8, &mut deck_cards, &mut total_added, &mut total_power);
-        
-        // 2. Fill the rest of the curve
-        fill_bucket(0, 3, &mut deck_cards, &mut total_added, &mut total_power);
-        fill_bucket(1, 4, &mut deck_cards, &mut total_added, &mut total_power); 
-        fill_bucket(3, 9, &mut deck_cards, &mut total_added, &mut total_power);
-        fill_bucket(4, 7, &mut deck_cards, &mut total_added, &mut total_power);
-        fill_bucket(5, 8, &mut deck_cards, &mut total_added, &mut total_power);
+        // Pass 3 (R - Removal)
+        for s in &valid_candidates {
+            if total_added >= target_size || removal_added >= max_removal { break; }
+            if deck_cards.iter().any(|(c, _)| c.name == s.card.name) { continue; }
+            if !s.cabs { continue; }
+            
+            if s.sbread.contains(&"Removal".to_string()) {
+                let to_add = std::cmp::min(std::cmp::min(3, max_removal - removal_added), target_size - total_added);
+                if to_add > 0 {
+                    deck_cards.push((s.card, to_add));
+                    total_added += to_add;
+                    total_power += s.card.power.unwrap_or(0) as usize * to_add;
+                    removal_added += to_add;
+                }
+            }
+        }
 
-        // 3. If we haven't reached 39 cards yet, backfill
+        // Pass 4 (E - Evasion)
+        for s in &valid_candidates {
+            if total_added >= target_size || evasion_added >= max_evasion { break; }
+            if deck_cards.iter().any(|(c, _)| c.name == s.card.name) { continue; }
+            if !s.cabs { continue; }
+            
+            if s.sbread.contains(&"Evasion".to_string()) {
+                let to_add = std::cmp::min(std::cmp::min(3, max_evasion - evasion_added), target_size - total_added);
+                if to_add > 0 {
+                    deck_cards.push((s.card, to_add));
+                    total_added += to_add;
+                    total_power += s.card.power.unwrap_or(0) as usize * to_add;
+                    evasion_added += to_add;
+                }
+            }
+        }
+
+        // Pass 5 (A - Aggro)
+        for s in &valid_candidates {
+            if total_added >= target_size || aggro_added >= max_aggro { break; }
+            if deck_cards.iter().any(|(c, _)| c.name == s.card.name) { continue; }
+            if !s.cabs { continue; }
+            
+            if s.sbread.contains(&"Aggro".to_string()) {
+                let to_add = std::cmp::min(std::cmp::min(3, max_aggro - aggro_added), target_size - total_added);
+                if to_add > 0 {
+                    deck_cards.push((s.card, to_add));
+                    total_added += to_add;
+                    total_power += s.card.power.unwrap_or(0) as usize * to_add;
+                    aggro_added += to_add;
+                }
+            }
+        }
+
+        // Pass 6 (D - Dump & Ramp Filler)
+        for s in &valid_candidates {
+            if total_added >= target_size { break; }
+            if deck_cards.iter().any(|(c, _)| c.name == s.card.name) { continue; }
+            
+            let is_ramp = s.card.name.starts_with("Seal of") || s.card.clean_text().to_lowercase().contains("gold token");
+            if is_ramp && total_power < 10 {
+                continue; 
+            }
+
+            if s.sbread.contains(&"Dump".to_string()) || is_ramp {
+                let to_add = std::cmp::min(std::cmp::min(3, max_dump - dump_added), target_size - total_added);
+                if to_add > 0 {
+                    deck_cards.push((s.card, to_add));
+                    total_added += to_add;
+                    total_power += s.card.power.unwrap_or(0) as usize * to_add;
+                    dump_added += to_add;
+                }
+            }
+        }
+
+        // Pass 7 (Curve / Filler)
         if total_added < target_size {
-            let mut remaining_space = target_size - total_added;
-            for s in scored {
-                if remaining_space == 0 { break; }
-                if !s.card.is_type("Unit") && !s.card.is_type("Spell") && !s.card.is_type("Gear") { continue; }
-                if s.card.name == legend.name || s.card.name == champion.name { continue; }
+            for s in &valid_candidates {
+                if total_added >= target_size { break; }
+                if deck_cards.iter().any(|(c, _)| c.name == s.card.name) { continue; }
                 
-                // Check if already in deck
-                if deck_cards.iter().any(|(c, _)| c.name == s.card.name) {
-                    continue;
-                }
-
-                let is_ramp = s.card.name.starts_with("Seal of") || s.card.clean_text().to_lowercase().contains("gold token");
-                if is_ramp && total_power < 10 {
-                    continue; 
-                }
-
-                let to_add = std::cmp::min(3, remaining_space);
+                let to_add = std::cmp::min(3, target_size - total_added);
                 deck_cards.push((s.card, to_add));
                 total_added += to_add;
                 total_power += s.card.power.unwrap_or(0) as usize * to_add;
-                remaining_space -= to_add;
             }
         }
 

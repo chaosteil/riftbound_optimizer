@@ -40,11 +40,13 @@ pub struct SynergyScorer {
 #[derive(Debug)]
 pub struct ScoredCard<'a> {
     pub card: &'a Card,
-    pub score: u32,
+    pub score: i32, // Changed to i32 to allow negative scoring for penalties
     pub matched_keywords: Vec<String>,
     pub matched_interactions: Vec<String>,
     pub matched_triggers: Vec<String>,
     pub meta_bonus: bool,
+    pub cabs: bool,
+    pub sbread: Vec<String>,
 }
 
 impl SynergyScorer {
@@ -93,11 +95,11 @@ impl SynergyScorer {
         let match_champ_k = candidate_keywords.intersection(&self.champion_keywords).count();
 
         // Base score for keywords
-        let mut score = (match_legend_k as u32 * 3) + (match_champ_k as u32 * 2);
+        let mut score: i32 = (match_legend_k as i32 * 3) + (match_champ_k as i32 * 2);
         
         // Bonus for interactions and triggers
-        score += (matched_interactions.len() as u32) * 2;
-        score += (matched_triggers.len() as u32) * 2;
+        score += (matched_interactions.len() as i32) * 2;
+        score += (matched_triggers.len() as i32) * 2;
 
         // Tribal synergy bonus
         if match_legend_k > 0 && match_champ_k > 0 {
@@ -133,6 +135,13 @@ impl SynergyScorer {
             Archetype::Midrange => {}
         }
 
+        let cabs = candidate.has_cabs();
+        if !cabs {
+            score -= 10; // Heavily penalize non-CABS cards
+        }
+
+        let sbread = candidate.extract_sbread();
+
         let mut mk_vec: Vec<String> = matched_keywords.into_iter().collect();
         mk_vec.sort();
         let mut mi_vec: Vec<String> = matched_interactions.into_iter().collect();
@@ -147,6 +156,8 @@ impl SynergyScorer {
             matched_interactions: mi_vec,
             matched_triggers: mt_vec,
             meta_bonus,
+            cabs,
+            sbread,
         }
     }
 
